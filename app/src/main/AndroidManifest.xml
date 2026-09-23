@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- ============================================================
+         包可见性声明（对应 Android 11+ 的「查询其他 App」限制）
+         不加这一段，系统在安卓 11 及以上会直接拦住跳转，
+         报 "无法解析该 Intent"，看起来像按钮坏了。
+         ============================================================ -->
+    <queries>
+        <!-- 淘宝 -->
+        <package android:name="com.taobao.taobao" />
+        <!-- 拼多多 -->
+        <package android:name="com.xunmeng.pinduoduo" />
+        <!-- 菜鸟（原生身份码页） -->
+        <package android:name="com.cainiao.wireless" />
+        <!-- 微信（兔喜生活小程序跑在微信里） -->
+        <package android:name="com.tencent.mm" />
+        <!-- 支付宝（兔喜生活小程序也可能在支付宝里） -->
+        <package android:name="com.eg.android.AlipayGphone" />
+        <!-- 极兔速递 -->
+        <package android:name="com.jtexpress.jt" />
+        <!-- 应用市场兜底 -->
+        <package android:name="com.android.vending" />
+        <package android:name="com.heytap.market" />
+        <package android:name="com.bbk.appstore" />
+        <package android:name="com.huawei.appmarket" />
+
+        <!-- 允许按 scheme 查询 -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="taobao" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="pinduoduo" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="weixin" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="cainiao" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="alipay" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="秒码"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:screenOrientation="portrait">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+    </application>
+
+</manifest>
