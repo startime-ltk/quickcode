@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_service_description">秒码一键出码服务：点击主页「一键出码」按钮后，自动打开目标 App 并模拟点击「我的」→「身份码/取件码」，帮您快速出示取件凭证。本服务仅在您主动点击「一键出码」时工作，不会在后台偷偷操作。</string>
+</resources>

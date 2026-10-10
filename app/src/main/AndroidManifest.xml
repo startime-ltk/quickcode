@@ -75,6 +75,20 @@
             android:exported="false"
             android:screenOrientation="portrait" />
 
+        <!-- 一键出码无障碍服务：由 MainActivity 主动触发，仅用于自动点击出码 -->
+        <service
+            android:name=".QuickCodeAccessibilityService"
+            android:exported="false"
+            android:label="秒码一键出码"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
     </application>
 
 </manifest>

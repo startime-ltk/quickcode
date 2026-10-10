@@ -4,6 +4,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+import android.provider.Settings;
 import android.widget.Toast;
 
 /**
@@ -117,6 +118,17 @@ public final class JumpHelper {
             return true;
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    /** 跳转系统「无障碍」设置页，用于开启秒码一键出码服务。 */
+    public static void openAccessibilitySettings(Context ctx) {
+        try {
+            Intent i = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            ctx.startActivity(i);
+        } catch (Exception e) {
+            toast(ctx, "无法打开无障碍设置页，请到系统设置手动开启");
         }
     }
 

@@ -16,10 +16,11 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 /**
- * 主界面 v1.3
+ * 主界面 v1.4
  *
  * 第一按钮 = 兔喜生活（微信扫一扫，扫驿站墙上的码直接进小程序）。
  * 其余按钮 = 直接打开对应 App。
+ * v1.4 新增：无障碍「一键出码」入口，自动点「我的」→「身份码/取件码」。
  */
 public class MainActivity extends Activity {
 
@@ -84,6 +85,14 @@ public class MainActivity extends Activity {
         root.addView(bigButton("拼多多", "打开拼多多 App（身份码在「我的」页）", C_PDD, dp(12),
                 v -> doLaunch(JumpHelper.PKG_PINDUODUO, "拼多多")));
 
+        // ==========================================================
+        // 一键出码 · 无障碍
+        // ==========================================================
+        root.addView(section("一键出码 · 无障碍", dp(22)));
+
+        root.addView(bigButton("一键出码", "开启无障碍后自动点「我的」→「身份码/取件码」", 0xFF8B5CF6, dp(12),
+                v -> startAccessibilityFlow()));
+
         // ---------- 设备自检入口 ----------
         TextView check = new TextView(this);
         check.setText("设备自检 · 查看各 App 是否已装  ›");
@@ -101,6 +110,7 @@ public class MainActivity extends Activity {
         note.setText("说明\n"
                 + "· 兔喜生活是小程序，微信禁止外部直接进小程序内部，唯一合规入口就是「扫一扫」扫驿站墙上的码。\n"
                 + "· 淘宝/拼多多/菜鸟只负责「打开 App」，身份码是登录态动态码、藏在 App 深处且无对外直达入口，打开后还需自己点一下。\n"
+                + "· 「一键出码」会自动点开「我的」→「身份码/取件码」，需先在系统设置开启秒码无障碍服务（见设备自检页）。\n"
                 + "· 点了完全没反应，优先检查上方 vivo 权限提示。");
         note.setTextColor(0xFF6B7280);
         note.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
@@ -121,6 +131,33 @@ public class MainActivity extends Activity {
 
     private void doJump(JumpHelper.Result r) {
         show(r);
+    }
+
+    /** 无障碍一键出码入口：检查服务已开启 → 选择目标 App → 设置任务并拉起。 */
+    private void startAccessibilityFlow() {
+        if (!QuickCodeAccessibilityService.isEnabled(this)) {
+            new AlertDialog.Builder(this)
+                    .setTitle("需要先开启无障碍服务")
+                    .setMessage("一键出码依赖系统无障碍服务自动点击。\n\n"
+                            + "请点击「去开启」进入系统设置，找到「秒码一键出码」并打开开关，"
+                            + "再回到本页重试。")
+                    .setPositiveButton("去开启", (d, w) ->
+                            JumpHelper.openAccessibilitySettings(this))
+                    .setNegativeButton("取消", null)
+                    .show();
+            return;
+        }
+        final String[] names = {"淘宝", "拼多多", "菜鸟"};
+        final String[] pkgs = {JumpHelper.PKG_TAOBAO,
+                JumpHelper.PKG_PINDUODUO, JumpHelper.PKG_CAINIAO};
+        new AlertDialog.Builder(this)
+                .setTitle("选择要自动出码的 App")
+                .setItems(names, (d, which) -> {
+                    QuickCodeAccessibilityService.requestTask(pkgs[which]);
+                    doLaunch(pkgs[which], names[which]);
+                })
+                .setNegativeButton("取消", null)
+                .show();
     }
 
     private void show(JumpHelper.Result r) {

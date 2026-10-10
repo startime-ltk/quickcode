@@ -4,17 +4,21 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
 /**
- * 设置 / 说明页。
+ * 设置 / 说明页 v1.4。
  * 当前版本采用「零配置」设计：不需要用户名密码，也不需要保存任何账号信息，
- * 只做跳转。本页仅用于展示各 App 的安装状态，便于排查问题。
+ * 只做跳转。本页用于展示各 App 的安装状态与无障碍服务状态，便于排查问题。
  */
 public class SettingsActivity extends Activity {
 
@@ -39,6 +43,53 @@ public class SettingsActivity extends Activity {
         addRow(root, "微信", "com.tencent.mm");
         addRow(root, "支付宝", "com.eg.android.AlipayGphone");
         addRow(root, "极兔速递", "com.jtexpress.jt");
+
+        // ---------- 无障碍模式 ----------
+        root.addView(h("无障碍模式", 22, 0xFFF2F4F8, true));
+
+        boolean accOn = QuickCodeAccessibilityService.isEnabled(this);
+        LinearLayout accRow = new LinearLayout(this);
+        accRow.setOrientation(LinearLayout.HORIZONTAL);
+        accRow.setPadding(0, dp(12), 0, dp(12));
+        TextView accName = h("秒码一键出码服务", 15, 0xFFF2F4F8, false);
+        accRow.addView(accName, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        TextView accStatus = h(accOn ? "已开启" : "未开启", 15,
+                accOn ? 0xFF2A9D5C : 0xFFE02E24, true);
+        accRow.addView(accStatus);
+        LinearLayout.LayoutParams accRowLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        accRowLp.topMargin = dp(4);
+        root.addView(accRow, accRowLp);
+
+        TextView accBtn = new TextView(this);
+        accBtn.setText(accOn ? "重新设置 · 系统无障碍页  ›" : "去开启无障碍服务  ›");
+        accBtn.setTextColor(Color.WHITE);
+        accBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        accBtn.setTypeface(Typeface.DEFAULT_BOLD);
+        accBtn.setGravity(Gravity.CENTER);
+        accBtn.setPadding(dp(16), dp(14), dp(16), dp(14));
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(0xFF8B5CF6);
+        g.setCornerRadius(dp(12));
+        accBtn.setBackground(g);
+        accBtn.setOnClickListener(v -> JumpHelper.openAccessibilitySettings(this));
+        LinearLayout.LayoutParams accBtnLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        accBtnLp.topMargin = dp(14);
+        root.addView(accBtn, accBtnLp);
+
+        TextView accTip = h("开启方法：设置 → 无障碍 → 已下载的服务（或更多服务）"
+                + " → 秒码一键出码 → 打开开关。\n\n"
+                + "开启后回到主页点「一键出码」，选择淘宝/拼多多/菜鸟，"
+                + "即可自动点开「我的」→「身份码/取件码」。\n\n"
+                + "本服务只在您主动点「一键出码」时工作，不会在后台偷偷点击。",
+                12, 0xFF6B7280, false);
+        accTip.setLineSpacing(dp(3), 1f);
+        LinearLayout.LayoutParams accTipLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        accTipLp.topMargin = dp(14);
+        root.addView(accTip, accTipLp);
 
         TextView tip = h("以上为检测结果。若显示「未安装」而实际已安装，"
                 + "可能是系统限制，重新安装 App 或重启手机可解决。\n\n"
