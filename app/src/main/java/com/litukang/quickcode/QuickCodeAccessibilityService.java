@@ -13,15 +13,15 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * 秒码无障碍服务 v1.4
+ * 秒码无障碍服务 v1.5
  *
  * 「一键出码」的自动化执行器：
  *   1. MainActivity 点「一键出码」后写入 pendingPkg（目标 App 包名）并拉起该 App；
  *   2. 本服务监听到目标 App 的窗口变化事件后，在后台线程执行出码流程：
  *      - 渐进等待页面渲染完成（每步随机延迟，降低淘宝/拼多多风控误判概率）
- *      - 按 viewId 优先、文本匹配兜底查找节点
+ *      - 按 viewId 优先、文本匹配兜底查找节点（含「不重要视图」，并遍历多窗口取根）
  *      - 自动点击「我的」→「身份码/取件码」
- *      - 找不到节点时明确 Toast 提示，绝不静默失败
+ *      - 找不到节点时明确 Toast 提示，且失败不锁定任务，后续窗口事件会自动重试
  *
  * 安全说明：本服务只在用户主动点击「一键出码」按钮、且 pendingPkg 被设置时才工作，
  * 不会在后台偷偷点击任何东西。
@@ -39,8 +39,17 @@ public class QuickCodeAccessibilityService extends AccessibilityService {
     /** 后台单线程执行任务，避免阻塞无障碍回调线程。 */
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
-    /** 最近已执行的任务号（防同一任务被多次窗口事件重复触发）。 */
-    private volatile int executedTaskId = -1;
+    /** 最近已成功完成的任务号（仅记录成功，失败不锁定，允许后续窗口事件重试）。 */
+    private volatile int completedTaskId = -1;
+
+    /** 本次任务是否已点击过「我的」页签（重试时避免反复点击把页面切走）。 */
+    private volatile int myTabClickedTaskId = -1;
+
+    /** 上次失败时间戳（失败后冷却，避免冷启动期间窗口事件风暴频繁重启任务）。 */
+    private volatile long lastFailAt = 0L;
+
+    /** 失败重试冷却时间。 */
+    private static final long FAIL_COOLDOWN_MS = 4000L;
 
     /** 是否正在执行任务（防并发重入）。 */
     private volatile boolean taskRunning = false;
@@ -130,14 +139,20 @@ public class QuickCodeAccessibilityService extends AccessibilityService {
         }
         int type = event.getEventType();
         if (type != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
-                && type != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
+                && type != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+                && type != AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
             return;
         }
         int taskId = pendingTaskId;
-        if (taskId == executedTaskId) {
+        // 已成功完成的任务不再重复触发；失败的任务允许由后续窗口事件自动重试。
+        if (taskId == completedTaskId) {
             return;
         }
-        executedTaskId = taskId;
+        // 失败后冷却：防止冷启动期间高频窗口事件反复重启任务。
+        long now = System.currentTimeMillis();
+        if (now - lastFailAt < FAIL_COOLDOWN_MS) {
+            return;
+        }
         taskRunning = true;
         executor.execute(() -> {
             try {
@@ -173,9 +188,11 @@ public class QuickCodeAccessibilityService extends AccessibilityService {
         toast("正在自动出码，请勿操作手机");
 
         // 阶段 1：直接找「身份码/取件码」（菜鸟等 App 首屏就有，无需进「我的」）
-        AccessibilityNodeInfo code = waitForNode(CODE_VIEW_IDS, CODE_TEXTS, 6);
+        // 冷启动可能很慢（Splash→加载→广告/登录页），给足等待窗口。
+        AccessibilityNodeInfo code = waitForNode(CODE_VIEW_IDS, CODE_TEXTS, 10);
         if (code != null) {
             if (clickNode(code)) {
+                completedTaskId = taskId;
                 toast("已点击「身份码/取件码」，请查看页面");
             } else {
                 toast("已找到「身份码/取件码」，但点击失败，请手动点击");
@@ -183,25 +200,32 @@ public class QuickCodeAccessibilityService extends AccessibilityService {
             return;
         }
 
-        // 阶段 2：找「我的」页签并点击
-        AccessibilityNodeInfo tab = waitForNode(TAB_MY_VIEW_IDS, TAB_MY_TEXTS, 12);
-        if (tab == null) {
-            toast("未找到「我的」入口，页面可能未加载完成或布局已变化，请手动操作");
-            return;
-        }
-        if (!clickNode(tab)) {
-            toast("已找到「我的」但点击失败，请手动点击");
-            return;
+        // 阶段 2：找「我的」页签并点击（长等待窗口覆盖 App 冷启动；若已点过则直接进阶段 3）
+        if (myTabClickedTaskId != taskId) {
+            AccessibilityNodeInfo tab = waitForNode(TAB_MY_VIEW_IDS, TAB_MY_TEXTS, 30);
+            if (tab == null) {
+                lastFailAt = System.currentTimeMillis();
+                toast("未找到「我的」入口，页面可能未加载完成或布局已变化，会自动重试，请稍候");
+                return;
+            }
+            if (!clickNode(tab)) {
+                lastFailAt = System.currentTimeMillis();
+                toast("已找到「我的」但点击失败，请手动点击");
+                return;
+            }
+            myTabClickedTaskId = taskId;
         }
 
         // 阶段 3：进入「我的」页后，渐进等待「身份码/取件码」出现
-        sleepRandom(1200, 2200);
-        AccessibilityNodeInfo code2 = waitForNode(CODE_VIEW_IDS, CODE_TEXTS, 12);
+        sleepRandom(1500, 2500);
+        AccessibilityNodeInfo code2 = waitForNode(CODE_VIEW_IDS, CODE_TEXTS, 30);
         if (code2 == null) {
-            toast("已进入「我的」页，但未找到「身份码/取件码」入口，请手动查看");
+            lastFailAt = System.currentTimeMillis();
+            toast("已进入「我的」页，但未找到「身份码/取件码」入口，会自动重试，请稍候");
             return;
         }
         if (clickNode(code2)) {
+            completedTaskId = taskId;
             toast("已点击「身份码/取件码」，请查看页面");
         } else {
             toast("已找到「身份码/取件码」，但点击失败，请手动点击");
@@ -215,15 +239,48 @@ public class QuickCodeAccessibilityService extends AccessibilityService {
      */
     private AccessibilityNodeInfo waitForNode(String[] viewIds, String[] texts, int maxAttempts) {
         for (int i = 0; i < maxAttempts; i++) {
-            AccessibilityNodeInfo root = getRootInActiveWindow();
-            if (root != null) {
-                AccessibilityNodeInfo n = findNode(root, viewIds, texts);
-                if (n != null) {
-                    return n;
+            AccessibilityNodeInfo n = findNodeInTargetWindow(viewIds, texts);
+            if (n != null) {
+                return n;
+            }
+            // 随机延迟：800-1500ms 起步，每轮 +100-150ms（渐进变慢，降低风控误判）
+            sleepRandom(800 + i * 100, 1500 + i * 150);
+        }
+        return null;
+    }
+
+    /**
+     * 在目标窗口内查找节点：
+     * 优先遍历 getWindows() 所有窗口、取目标包名窗口的根节点（冷启动/窗口过渡期更稳，
+     * 部分 ROM 上 getRootInActiveWindow 会返回 null 或非目标窗口）；
+     * 取不到时兜底 getRootInActiveWindow()。
+     */
+    private AccessibilityNodeInfo findNodeInTargetWindow(String[] viewIds, String[] texts) {
+        if (pendingPkg == null) {
+            return null;
+        }
+        List<android.view.accessibility.AccessibilityWindowInfo> windows = getWindows();
+        if (windows != null) {
+            for (android.view.accessibility.AccessibilityWindowInfo w : windows) {
+                if (w == null || w.getRoot() == null) {
+                    continue;
+                }
+                AccessibilityNodeInfo root = w.getRoot();
+                if (root.getPackageName() != null
+                        && pendingPkg.equals(root.getPackageName().toString())) {
+                    AccessibilityNodeInfo n = findNode(root, viewIds, texts);
+                    if (n != null) {
+                        return n;
+                    }
                 }
             }
-            // 随机延迟：600-1400ms 起步，每轮 +150-200ms
-            sleepRandom(600 + i * 150, 1400 + i * 200);
+        }
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root != null) {
+            AccessibilityNodeInfo n = findNode(root, viewIds, texts);
+            if (n != null) {
+                return n;
+            }
         }
         return null;
     }
@@ -310,7 +367,8 @@ public class QuickCodeAccessibilityService extends AccessibilityService {
             }
             p = p.getParent();
         }
-        return true;
+        // 自身和父链都不可点击：不选该节点，避免后续 performAction 必然失败
+        return false;
     }
 
     /** 点击节点：优先点自身，自身不可点则沿父链找可点击节点。 */
